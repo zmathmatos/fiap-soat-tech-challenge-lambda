@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!terraform/terraform.tfvars.example
+.env
+npm-debug.log*
