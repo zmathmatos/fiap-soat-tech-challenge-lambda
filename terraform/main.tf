@@ -9,7 +9,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket = "fiap-soat-terraform-state-bucket"
+    bucket = "fiap-soat-terraform-state-963562973486"
     key    = "lambda/terraform.tfstate"
     region = "us-east-1"
   }
@@ -22,7 +22,7 @@ provider "aws" {
 data "terraform_remote_state" "infra_k8s" {
   backend = "s3"
   config = {
-    bucket = "fiap-soat-terraform-state-bucket"
+    bucket = "fiap-soat-terraform-state-963562973486"
     key    = "infra-k8s/terraform.tfstate"
     region = "us-east-1"
   }
@@ -31,7 +31,7 @@ data "terraform_remote_state" "infra_k8s" {
 data "terraform_remote_state" "infra_db" {
   backend = "s3"
   config = {
-    bucket = "fiap-soat-terraform-state-bucket"
+    bucket = "fiap-soat-terraform-state-963562973486"
     key    = "infra-db/terraform.tfstate"
     region = "us-east-1"
   }
