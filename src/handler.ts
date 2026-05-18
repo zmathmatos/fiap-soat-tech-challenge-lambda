@@ -8,33 +8,33 @@ export const handler = async (
 ): Promise<APIGatewayProxyResult> => {
   try {
     const body = event.body ? JSON.parse(event.body) : {};
-    const { cpf } = body;
+    const { document } = body;
 
-    if (!cpf) {
+    if (!document) {
       return {
-        statusCode: 400,
+        statusCode: 401,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "CPF is required" }),
+        body: JSON.stringify({ error: "Unauthorized" }),
       };
     }
 
-    const cleanCPF = cpf.replace(/\D/g, "");
+    const cleanDocument = document.replace(/\D/g, "");
 
-    if (!validateCPF(cleanCPF)) {
+    if (!validateCPF(cleanDocument)) {
       return {
-        statusCode: 400,
+        statusCode: 401,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Invalid CPF format" }),
+        body: JSON.stringify({ error: "Unauthorized" }),
       };
     }
 
-    const user = await findUserByDocument(cleanCPF);
+    const user = await findUserByDocument(cleanDocument);
 
     if (!user) {
       return {
-        statusCode: 404,
+        statusCode: 401,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "User not found" }),
+        body: JSON.stringify({ error: "Unauthorized" }),
       };
     }
 

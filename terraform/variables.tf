@@ -10,6 +10,11 @@ variable "environment" {
   default     = "dev"
 }
 
+variable "lambda_role_arn" {
+  description = "ARN of the IAM role for Lambda"
+  type        = string
+}
+
 variable "aws_region" {
   description = "AWS region"
   type        = string
@@ -43,5 +48,10 @@ variable "jwt_secret" {
 variable "jwt_expires_in" {
   description = "JWT expiration time"
   type        = string
-  default     = "24h"
+}
+
+variable "backend_port" {
+  description = "Port the EC2 Node.js backend listens on"
+  type        = number
+  default     = 3000
 }

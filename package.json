@@ -1,7 +1,7 @@
 {
   "name": "fiap-soat-tech-challenge-lambda",
   "version": "1.0.0",
-  "description": "FIAP Tech Challenge - Lambda CPF Authentication",
+  "description": "FIAP Tech Challenge - Lambda Document Authentication",
   "main": "dist/handler.js",
   "scripts": {
     "build": "tsc",

@@ -35,23 +35,23 @@ describe("Lambda Handler", () => {
     process.env.JWT_SECRET = "test-secret";
   });
 
-  it("should return 400 when CPF is missing", async () => {
+  it("should return 401 when document is missing", async () => {
     const result = await handler(createEvent({}));
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toBe("CPF is required");
+    expect(result.statusCode).toBe(401);
+    expect(JSON.parse(result.body).error).toBe("Unauthorized");
   });
 
-  it("should return 400 for invalid CPF", async () => {
-    const result = await handler(createEvent({ cpf: "12345678900" }));
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toBe("Invalid CPF format");
+  it("should return 401 for invalid CPF", async () => {
+    const result = await handler(createEvent({ document: "12345678900" }));
+    expect(result.statusCode).toBe(401);
+    expect(JSON.parse(result.body).error).toBe("Unauthorized");
   });
 
-  it("should return 404 when user not found", async () => {
+  it("should return 401 when user not found", async () => {
     mockFindUser.mockResolvedValue(null);
-    const result = await handler(createEvent({ cpf: "52998224725" }));
-    expect(result.statusCode).toBe(404);
-    expect(JSON.parse(result.body).error).toBe("User not found");
+    const result = await handler(createEvent({ document: "52998224725" }));
+    expect(result.statusCode).toBe(401);
+    expect(JSON.parse(result.body).error).toBe("Unauthorized");
   });
 
   it("should return 200 with token for valid CPF", async () => {
@@ -64,7 +64,7 @@ describe("Lambda Handler", () => {
     });
     mockGenerateToken.mockReturnValue("jwt-token-123");
 
-    const result = await handler(createEvent({ cpf: "52998224725" }));
+    const result = await handler(createEvent({ document: "52998224725" }));
     expect(result.statusCode).toBe(200);
 
     const body = JSON.parse(result.body);

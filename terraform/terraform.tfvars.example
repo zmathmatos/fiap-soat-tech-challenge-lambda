@@ -1,7 +1,6 @@
 project_name    = "fiap-soat"
 environment     = "dev"
-aws_region      = "us-east-1"
-lambda_zip_path = "../dist/lambda.zip"
+lambda_role_arn = "arn:aws:iam::ACCOUNT_ID:role/lambda_role"
 db_user         = "postgres"
 db_password     = "CHANGE_ME"
 jwt_secret      = "CHANGE_ME"
