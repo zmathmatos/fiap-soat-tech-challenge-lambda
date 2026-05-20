@@ -1,41 +1,28 @@
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { APIGatewayRequestAuthorizerEventV2 } from "aws-lambda";
 import { validateCPF } from "./validators/cpf-validator";
 import { findUserByDocument } from "./database/user-repository";
 import { generateToken } from "./auth/token-service";
 
 export const handler = async (
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
+  event: APIGatewayRequestAuthorizerEventV2
+): Promise<{ isAuthorized: boolean; context?: Record<string, string> }> => {
   try {
-    const body = event.body ? JSON.parse(event.body) : {};
-    const { document } = body;
+    const document = event.headers?.["x-document"];
 
     if (!document) {
-      return {
-        statusCode: 401,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Unauthorized" }),
-      };
+      return { isAuthorized: false };
     }
 
     const cleanDocument = document.replace(/\D/g, "");
 
     if (!validateCPF(cleanDocument)) {
-      return {
-        statusCode: 401,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Unauthorized" }),
-      };
+      return { isAuthorized: false };
     }
 
     const user = await findUserByDocument(cleanDocument);
 
     if (!user) {
-      return {
-        statusCode: 401,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Unauthorized" }),
-      };
+      return { isAuthorized: false };
     }
 
     const token = generateToken({
@@ -45,24 +32,16 @@ export const handler = async (
     });
 
     return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        },
-      }),
+      isAuthorized: true,
+      context: {
+        jwt: token,
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      },
     };
   } catch (error) {
-    console.error("Authentication error:", error);
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Internal server error" }),
-    };
+    console.error("Authorization error:", error);
+    return { isAuthorized: false };
   }
 };

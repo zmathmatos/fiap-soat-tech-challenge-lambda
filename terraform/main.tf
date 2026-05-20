@@ -123,12 +123,15 @@ resource "aws_apigatewayv2_vpc_link" "backend" {
   tags               = local.common_tags
 }
 
-# This connects the API Gateway to the Lambda function (AWS_PROXY passes the full request to Lambda)
-resource "aws_apigatewayv2_integration" "lambda" {
-  api_id                 = aws_apigatewayv2_api.auth.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.auth.invoke_arn
-  payload_format_version = "2.0"
+# Lambda authorizer — validates the x-document header for all /customer/* routes
+resource "aws_apigatewayv2_authorizer" "lambda" {
+  api_id                            = aws_apigatewayv2_api.auth.id
+  authorizer_type                   = "REQUEST"
+  authorizer_uri                    = aws_lambda_function.auth.invoke_arn
+  identity_sources                  = ["$request.header.x-document"]
+  name                              = "${var.project_name}-${var.environment}-authorizer"
+  authorizer_payload_format_version = "2.0"
+  enable_simple_responses           = true
 }
 
 # This connects the API Gateway to the EC2 backend via VPC Link
@@ -141,11 +144,13 @@ resource "aws_apigatewayv2_integration" "backend" {
   connection_id      = aws_apigatewayv2_vpc_link.backend.id
 }
 
-# This maps a specific HTTP method + path to the integration.
+# /customer/* routes are protected by the Lambda authorizer; traffic is forwarded to the EC2 backend
 resource "aws_apigatewayv2_route" "customer_routes" {
-  api_id    = aws_apigatewayv2_api.auth.id
-  route_key = "ANY /customer/service-orders/{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id             = aws_apigatewayv2_api.auth.id
+  route_key          = "ANY /customer/{proxy+}"
+  target             = "integrations/${aws_apigatewayv2_integration.backend.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.lambda.id
+  authorization_type = "CUSTOM"
 }
 
 resource "aws_apigatewayv2_route" "admin_routes" {

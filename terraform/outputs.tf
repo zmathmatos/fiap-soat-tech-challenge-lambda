@@ -13,7 +13,7 @@ output "api_gateway_url" {
   value       = aws_apigatewayv2_api.auth.api_endpoint
 }
 
-output "auth_endpoint" {
-  description = "Full authentication endpoint"
-  value       = "${aws_apigatewayv2_api.auth.api_endpoint}/auth"
+output "authorizer_id" {
+  description = "Lambda authorizer ID attached to /customer/* routes"
+  value       = aws_apigatewayv2_authorizer.lambda.id
 }
