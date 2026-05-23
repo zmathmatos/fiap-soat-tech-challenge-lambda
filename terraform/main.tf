@@ -16,7 +16,7 @@ provider "aws" {
 data "terraform_remote_state" "infra_k8s" {
   backend = "s3"
   config = {
-    bucket = "fiap-soat-terraform-state-bucket"
+    bucket = var.terraform_state_bucket
     key    = "infra-k8s/terraform.tfstate"
     region = "us-east-1"
   }
@@ -25,7 +25,7 @@ data "terraform_remote_state" "infra_k8s" {
 data "terraform_remote_state" "infra_db" {
   backend = "s3"
   config = {
-    bucket = "fiap-soat-terraform-state-bucket"
+    bucket = var.terraform_state_bucket
     key    = "infra-db/terraform.tfstate"
     region = "us-east-1"
   }
@@ -41,8 +41,8 @@ locals {
 
 data "aws_instance" "backend" {
   filter {
-    name   = "tag:Name"
-    values = ["fiap-soat-dev-backend"]
+    name   = "tag:aws:eks:cluster-name"
+    values = ["fiap-soat-dev-eks"]
   }
 
   filter {

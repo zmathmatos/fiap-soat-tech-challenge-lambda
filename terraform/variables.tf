@@ -55,3 +55,8 @@ variable "backend_port" {
   type        = number
   default     = 3000
 }
+
+variable "terraform_state_bucket" {
+  description = "S3 bucket for Terraform state"
+  type        = string
+}
