@@ -1,5 +1,5 @@
 import { APIGatewayRequestAuthorizerEventV2 } from "aws-lambda";
-import { validateCPF } from "./validators/cpf-validator";
+import { validateDocument } from "./validators/document-validator";
 import { findUserByDocument } from "./database/user-repository";
 import { generateToken } from "./auth/token-service";
 
@@ -15,7 +15,7 @@ export const handler = async (
 
     const cleanDocument = document.replace(/\D/g, "");
 
-    if (!validateCPF(cleanDocument)) {
+    if (!validateDocument(cleanDocument)) {
       return { isAuthorized: false };
     }
 
