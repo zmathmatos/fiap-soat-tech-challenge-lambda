@@ -5,6 +5,10 @@ describe("validateDocument", () => {
     expect(validateDocument("52998224725")).toBe(true);
   });
 
+  it("should validate a correct CNPJ", () => {
+    expect(validateDocument("11222333000181")).toBe(true);
+  });
+
   it("should reject an invalid CPF", () => {
     expect(validateDocument("12345678900")).toBe(false);
   });

@@ -86,4 +86,21 @@ describe("Lambda Authorizer", () => {
     expect(result.context?.userId).toBe("uuid-123");
     expect(result.context?.email).toBe("test@test.com");
   });
+
+  it ("should authorize and return JWT context for valid CNPJ", async () => {
+    mockFindUser.mockResolvedValue({
+      id: "uuid-456",
+      name: "Test Company",
+      document: "11222333000181",
+      email: "test.company@email.com",
+      role: "customer",
+    });
+    mockGenerateToken.mockReturnValue("jwt-token-456");
+
+    const result = await handler(createEvent("11222333000181"));
+    expect(result.isAuthorized).toBe(true);
+    expect(result.context?.jwt).toBe("jwt-token-456");
+    expect(result.context?.userId).toBe("uuid-456");
+    expect(result.context?.email).toBe("test.company@email.com");
+  });
 });
