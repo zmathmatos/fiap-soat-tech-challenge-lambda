@@ -39,16 +39,15 @@ locals {
   }
 }
 
-data "aws_instance" "backend" {
-  filter {
-    name   = "tag:aws:eks:cluster-name"
-    values = ["fiap-soat-dev-eks"]
+data "aws_lb" "backend" {
+  tags = {
+    "kubernetes.io/service-name" = "fiap-soat/fiap-soat-tech-challenge-app"
   }
+}
 
-  filter {
-    name   = "instance-state-name"
-    values = ["running"]
-  }
+data "aws_lb_listener" "backend" {
+  load_balancer_arn = data.aws_lb.backend.arn
+  port              = 80
 }
 
 # Lambda function
@@ -64,7 +63,7 @@ resource "aws_lambda_function" "auth" {
 
   vpc_config {
     subnet_ids         = data.terraform_remote_state.infra_k8s.outputs.private_subnet_ids
-    security_group_ids = [aws_security_group.lambda.id]
+    security_group_ids = [data.terraform_remote_state.infra_k8s.outputs.eks_cluster_security_group_id]
   }
 
   environment {
@@ -82,22 +81,6 @@ resource "aws_lambda_function" "auth" {
   tags = local.common_tags
 }
 
-# Security Group for Lambda (to access RDS)
-resource "aws_security_group" "lambda" {
-  name        = "${var.project_name}-${var.environment}-lambda-sg"
-  description = "Security group for Lambda function"
-  vpc_id      = data.terraform_remote_state.infra_k8s.outputs.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = merge(local.common_tags, { Name = "${var.project_name}-${var.environment}-lambda-sg" })
-}
-
 # API Gateway
 resource "aws_apigatewayv2_api" "auth" {
   name          = "${var.project_name}-${var.environment}-auth-api"
@@ -107,8 +90,8 @@ resource "aws_apigatewayv2_api" "auth" {
 
 # The deployment stage
 resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.auth.id
-  name        = "$default"
+  api_id = aws_apigatewayv2_api.auth.id
+  name   = "$default"
   # `auto_deploy = true` means any route change is deployed automatically without a manual deploy step
   auto_deploy = true
 
@@ -119,7 +102,7 @@ resource "aws_apigatewayv2_stage" "default" {
 resource "aws_apigatewayv2_vpc_link" "backend" {
   name               = "${var.project_name}-${var.environment}-vpc-link"
   subnet_ids         = data.terraform_remote_state.infra_k8s.outputs.private_subnet_ids
-  security_group_ids = [aws_security_group.lambda.id]
+  security_group_ids = [data.terraform_remote_state.infra_k8s.outputs.eks_cluster_security_group_id]
   tags               = local.common_tags
 }
 
@@ -138,7 +121,7 @@ resource "aws_apigatewayv2_authorizer" "lambda" {
 resource "aws_apigatewayv2_integration" "backend" {
   api_id             = aws_apigatewayv2_api.auth.id
   integration_type   = "HTTP_PROXY"
-  integration_uri    = "http://${data.aws_instance.backend.private_ip}:${var.backend_port}/{proxy}"
+  integration_uri    = data.aws_lb_listener.backend.arn
   integration_method = "ANY"
   connection_type    = "VPC_LINK"
   connection_id      = aws_apigatewayv2_vpc_link.backend.id
@@ -151,6 +134,12 @@ resource "aws_apigatewayv2_route" "customer_routes" {
   target             = "integrations/${aws_apigatewayv2_integration.backend.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.lambda.id
   authorization_type = "CUSTOM"
+}
+
+resource "aws_apigatewayv2_route" "auth_routes" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "POST /auth/login"
+  target    = "integrations/${aws_apigatewayv2_integration.backend.id}"
 }
 
 resource "aws_apigatewayv2_route" "admin_routes" {
