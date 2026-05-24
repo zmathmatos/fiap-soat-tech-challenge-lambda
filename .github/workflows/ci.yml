@@ -91,7 +91,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init
+        run: terraform init -backend-config=vars.BACKEND_BUCKET_NAME
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
