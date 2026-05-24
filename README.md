@@ -133,6 +133,8 @@ Disparado em push para `main` ou manualmente via `workflow_dispatch`. Sequência
 | `TF_STATE_BUCKET` | var | Nome do bucket S3 de state (ex: `fiap-soat-backend-430891654117`) |
 | `JWT_EXPIRES_IN` | var | TTL do token (default `24h`) — passado como `TF_VAR_jwt_expires_in` |
 
+> **Atenção:** o `JWT_SECRET` precisa ser o mesmo utilizado no APP, caso contrário a autenticação não vai funcionar.
+
 ## Como deployar manualmente
 
 ### Pré-requisitos
@@ -140,7 +142,7 @@ Disparado em push para `main` ou manualmente via `workflow_dispatch`. Sequência
 - Node.js 18+, npm
 - Terraform >= 1.0
 - AWS CLI configurado com credenciais válidas
-- Bucket S3 de state pré-existente (criar com `aws s3 mb s3://fiap-soat-backend-<ACCOUNT_ID> --region us-east-1`)
+- Bucket S3 de state pré-existente (criar com `aws s3 mb s3://<BUCKET_NAME> --region us-east-1`)
 - `infra-k8s` e `infra-db` já aplicados (remote state disponível)
 
 ### Passos
@@ -150,12 +152,9 @@ npm run build && npm run package   # gera dist/lambda.zip
 
 cd terraform
 
-export TF_STATE_BUCKET=fiap-soat-backend-<ACCOUNT_ID>
+export TF_STATE_BUCKET=<BUCKET_NAME>
 
-terraform init \
-  -backend-config="bucket=$TF_STATE_BUCKET" \
-  -backend-config="key=lambda/terraform.tfstate" \
-  -backend-config="region=us-east-1"
+terraform init
 
 terraform apply -var-file=terraform.tfvars
 ```
