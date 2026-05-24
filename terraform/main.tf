@@ -7,12 +7,6 @@ terraform {
       version = "~> 5.0"
     }
   }
-
-  backend "s3" {
-    bucket = "fiap-soat-terraform-state-bucket"
-    key    = "lambda/terraform.tfstate"
-    region = "us-east-1"
-  }
 }
 
 provider "aws" {
@@ -22,7 +16,7 @@ provider "aws" {
 data "terraform_remote_state" "infra_k8s" {
   backend = "s3"
   config = {
-    bucket = "fiap-soat-terraform-state-bucket"
+    bucket = var.terraform_state_bucket
     key    = "infra-k8s/terraform.tfstate"
     region = "us-east-1"
   }
@@ -31,7 +25,7 @@ data "terraform_remote_state" "infra_k8s" {
 data "terraform_remote_state" "infra_db" {
   backend = "s3"
   config = {
-    bucket = "fiap-soat-terraform-state-bucket"
+    bucket = var.terraform_state_bucket
     key    = "infra-db/terraform.tfstate"
     region = "us-east-1"
   }
@@ -45,25 +39,31 @@ locals {
   }
 }
 
-# IAM Role for Lambda
-data "aws_iam_role" "lab_role" {
-  name = "LabRole"
+data "aws_lb" "backend" {
+  tags = {
+    "kubernetes.io/service-name" = "fiap-soat/fiap-soat-tech-challenge-app"
+  }
+}
+
+data "aws_lb_listener" "backend" {
+  load_balancer_arn = data.aws_lb.backend.arn
+  port              = 80
 }
 
 # Lambda function
 resource "aws_lambda_function" "auth" {
   filename         = var.lambda_zip_path
   function_name    = "${var.project_name}-${var.environment}-auth"
-  role             = data.aws_iam_role.lab_role.arn
+  role             = var.lambda_role_arn
   handler          = "handler.handler"
-  runtime          = "nodejs18.x"
+  runtime          = "nodejs22.x"
   timeout          = 30
   memory_size      = 256
   source_code_hash = filebase64sha256(var.lambda_zip_path)
 
   vpc_config {
     subnet_ids         = data.terraform_remote_state.infra_k8s.outputs.private_subnet_ids
-    security_group_ids = [aws_security_group.lambda.id]
+    security_group_ids = [data.terraform_remote_state.infra_k8s.outputs.eks_cluster_security_group_id]
   }
 
   environment {
@@ -81,22 +81,6 @@ resource "aws_lambda_function" "auth" {
   tags = local.common_tags
 }
 
-# Security Group for Lambda (to access RDS)
-resource "aws_security_group" "lambda" {
-  name        = "${var.project_name}-${var.environment}-lambda-sg"
-  description = "Security group for Lambda function"
-  vpc_id      = data.terraform_remote_state.infra_k8s.outputs.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = merge(local.common_tags, { Name = "${var.project_name}-${var.environment}-lambda-sg" })
-}
-
 # API Gateway
 resource "aws_apigatewayv2_api" "auth" {
   name          = "${var.project_name}-${var.environment}-auth-api"
@@ -104,57 +88,78 @@ resource "aws_apigatewayv2_api" "auth" {
   tags          = local.common_tags
 }
 
+# The deployment stage
 resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.auth.id
-  name        = "$default"
+  api_id = aws_apigatewayv2_api.auth.id
+  name   = "$default"
+  # `auto_deploy = true` means any route change is deployed automatically without a manual deploy step
   auto_deploy = true
-
-  access_log_settings {
-    destination_arn = aws_cloudwatch_log_group.api_gateway.arn
-    format = jsonencode({
-      requestId      = "$context.requestId"
-      ip             = "$context.identity.sourceIp"
-      requestTime    = "$context.requestTime"
-      httpMethod     = "$context.httpMethod"
-      routeKey       = "$context.routeKey"
-      status         = "$context.status"
-      protocol       = "$context.protocol"
-      responseLength = "$context.responseLength"
-    })
-  }
 
   tags = local.common_tags
 }
 
-resource "aws_apigatewayv2_integration" "auth" {
-  api_id                 = aws_apigatewayv2_api.auth.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.auth.invoke_arn
-  payload_format_version = "2.0"
+# VPC Link allows API Gateway to reach private resources inside the VPC
+resource "aws_apigatewayv2_vpc_link" "backend" {
+  name               = "${var.project_name}-${var.environment}-vpc-link"
+  subnet_ids         = data.terraform_remote_state.infra_k8s.outputs.private_subnet_ids
+  security_group_ids = [data.terraform_remote_state.infra_k8s.outputs.eks_cluster_security_group_id]
+  tags               = local.common_tags
 }
 
-resource "aws_apigatewayv2_route" "auth" {
+# Lambda authorizer — validates the x-document header for all /customer/* routes
+resource "aws_apigatewayv2_authorizer" "lambda" {
+  api_id                            = aws_apigatewayv2_api.auth.id
+  authorizer_type                   = "REQUEST"
+  authorizer_uri                    = aws_lambda_function.auth.invoke_arn
+  identity_sources                  = ["$request.header.x-document"]
+  name                              = "${var.project_name}-${var.environment}-authorizer"
+  authorizer_payload_format_version = "2.0"
+  enable_simple_responses           = true
+}
+
+# This connects the API Gateway to the EC2 backend via VPC Link
+resource "aws_apigatewayv2_integration" "backend" {
+  api_id             = aws_apigatewayv2_api.auth.id
+  integration_type   = "HTTP_PROXY"
+  integration_uri    = data.aws_lb_listener.backend.arn
+  integration_method = "ANY"
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.backend.id
+}
+
+# /customer/* routes are protected by the Lambda authorizer; traffic is forwarded to the EC2 backend
+resource "aws_apigatewayv2_route" "customer_routes" {
+  api_id             = aws_apigatewayv2_api.auth.id
+  route_key          = "ANY /customer/{proxy+}"
+  target             = "integrations/${aws_apigatewayv2_integration.backend.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.lambda.id
+  authorization_type = "CUSTOM"
+}
+
+resource "aws_apigatewayv2_route" "auth_routes" {
   api_id    = aws_apigatewayv2_api.auth.id
-  route_key = "POST /auth"
-  target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
+  route_key = "POST /auth/login"
+  target    = "integrations/${aws_apigatewayv2_integration.backend.id}"
 }
 
+resource "aws_apigatewayv2_route" "admin_routes" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "ANY /admin/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.backend.id}"
+}
+
+resource "aws_apigatewayv2_route" "health_route" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "ANY /health"
+  target    = "integrations/${aws_apigatewayv2_integration.backend.id}"
+}
+
+# AWS requires an explicit permission for API Gateway to call Lambda.
+# Without this, the invocation would be denied even if everything else is wired up correctly.
 resource "aws_lambda_permission" "api_gateway" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.auth.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
-}
-
-resource "aws_cloudwatch_log_group" "lambda" {
-  name              = "/aws/lambda/${aws_lambda_function.auth.function_name}"
-  retention_in_days = 14
-  tags              = local.common_tags
-}
-
-resource "aws_cloudwatch_log_group" "api_gateway" {
-  name              = "/aws/apigateway/${aws_apigatewayv2_api.auth.name}"
-  retention_in_days = 14
-  tags              = local.common_tags
 }

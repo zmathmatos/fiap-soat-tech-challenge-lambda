@@ -40,7 +40,7 @@ export async function findUserByDocument(
 ): Promise<UserRecord | null> {
   const client = await getClient();
   const result = await client.query(
-    "SELECT id, name, document, email, role FROM users WHERE document = $1 LIMIT 1",
+    "SELECT id, name, document, email, role FROM users WHERE role = 'customer' AND document = $1 LIMIT 1",
     [document]
   );
 

@@ -1,11 +1,12 @@
 {
   "name": "fiap-soat-tech-challenge-lambda",
   "version": "1.0.0",
-  "description": "FIAP Tech Challenge - Lambda CPF Authentication",
+  "description": "FIAP Tech Challenge - Lambda Document Authentication",
   "main": "dist/handler.js",
   "scripts": {
     "build": "tsc",
-    "package": "npm run build && cd dist && zip -r lambda.zip . && cd ..",
+    "bundle": "esbuild src/handler.ts --bundle --platform=node --target=node22 --outfile=dist/handler.js --minify",
+    "package": "npm run bundle && cd dist && zip -r lambda.zip handler.js && cd ..",
     "test": "jest --runInBand --silent",
     "test:coverage": "jest --runInBand --coverage --silent"
   },
@@ -20,6 +21,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.0.0",
     "@types/pg": "^8.11.6",
+    "esbuild": "^0.28.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.1",
     "typescript": "^5.9.3"

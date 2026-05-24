@@ -1,5 +1,5 @@
 import { handler } from "../src/handler";
-import { APIGatewayProxyEvent } from "aws-lambda";
+import { APIGatewayRequestAuthorizerEventV2 } from "aws-lambda";
 import * as userRepository from "../src/database/user-repository";
 import * as tokenService from "../src/auth/token-service";
 
@@ -13,48 +13,64 @@ const mockGenerateToken = tokenService.generateToken as jest.MockedFunction<
   typeof tokenService.generateToken
 >;
 
-const createEvent = (body: object): APIGatewayProxyEvent =>
+const createEvent = (document?: string): APIGatewayRequestAuthorizerEventV2 =>
   ({
-    body: JSON.stringify(body),
-    headers: {},
-    multiValueHeaders: {},
-    httpMethod: "POST",
-    isBase64Encoded: false,
-    path: "/auth",
-    pathParameters: null,
-    queryStringParameters: null,
-    multiValueQueryStringParameters: null,
-    stageVariables: null,
-    requestContext: {} as any,
-    resource: "",
-  } as APIGatewayProxyEvent);
+    version: "2.0",
+    type: "REQUEST",
+    routeArn:
+      "arn:aws:execute-api:us-east-1:123456789012:api-id/$default/ANY/customer/service-orders",
+    identitySource: document ? [document] : [],
+    routeKey: "ANY /customer/{proxy+}",
+    rawPath: "/customer/service-orders",
+    rawQueryString: "",
+    headers: document ? { "x-document": document } : {},
+    cookies: [],
+    queryStringParameters: {},
+    pathParameters: { proxy: "orders" },
+    stageVariables: {},
+    requestContext: {
+      accountId: "123456789012",
+      apiId: "api-id",
+      domainName: "api-id.execute-api.us-east-1.amazonaws.com",
+      domainPrefix: "api-id",
+      http: {
+        method: "GET",
+        path: "/customer/service-orders",
+        protocol: "HTTP/1.1",
+        sourceIp: "1.2.3.4",
+        userAgent: "test",
+      },
+      requestId: "test-request-id",
+      routeKey: "ANY /customer/{proxy+}",
+      stage: "$default",
+      time: "01/Jan/2024:00:00:00 +0000",
+      timeEpoch: 1704067200000,
+    },
+  } as APIGatewayRequestAuthorizerEventV2);
 
-describe("Lambda Handler", () => {
+describe("Lambda Authorizer", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.JWT_SECRET = "test-secret";
   });
 
-  it("should return 400 when CPF is missing", async () => {
-    const result = await handler(createEvent({}));
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toBe("CPF is required");
+  it("should deny when x-document header is missing", async () => {
+    const result = await handler(createEvent());
+    expect(result.isAuthorized).toBe(false);
   });
 
-  it("should return 400 for invalid CPF", async () => {
-    const result = await handler(createEvent({ cpf: "12345678900" }));
-    expect(result.statusCode).toBe(400);
-    expect(JSON.parse(result.body).error).toBe("Invalid CPF format");
+  it("should deny for invalid CPF", async () => {
+    const result = await handler(createEvent("12345678900"));
+    expect(result.isAuthorized).toBe(false);
   });
 
-  it("should return 404 when user not found", async () => {
+  it("should deny when user not found", async () => {
     mockFindUser.mockResolvedValue(null);
-    const result = await handler(createEvent({ cpf: "52998224725" }));
-    expect(result.statusCode).toBe(404);
-    expect(JSON.parse(result.body).error).toBe("User not found");
+    const result = await handler(createEvent("52998224725"));
+    expect(result.isAuthorized).toBe(false);
   });
 
-  it("should return 200 with token for valid CPF", async () => {
+  it("should authorize and return JWT context for valid CPF", async () => {
     mockFindUser.mockResolvedValue({
       id: "uuid-123",
       name: "Test User",
@@ -64,12 +80,27 @@ describe("Lambda Handler", () => {
     });
     mockGenerateToken.mockReturnValue("jwt-token-123");
 
-    const result = await handler(createEvent({ cpf: "52998224725" }));
-    expect(result.statusCode).toBe(200);
+    const result = await handler(createEvent("52998224725"));
+    expect(result.isAuthorized).toBe(true);
+    expect(result.context?.jwt).toBe("jwt-token-123");
+    expect(result.context?.userId).toBe("uuid-123");
+    expect(result.context?.email).toBe("test@test.com");
+  });
 
-    const body = JSON.parse(result.body);
-    expect(body.token).toBe("jwt-token-123");
-    expect(body.user.id).toBe("uuid-123");
-    expect(body.user.email).toBe("test@test.com");
+  it ("should authorize and return JWT context for valid CNPJ", async () => {
+    mockFindUser.mockResolvedValue({
+      id: "uuid-456",
+      name: "Test Company",
+      document: "11222333000181",
+      email: "test.company@email.com",
+      role: "customer",
+    });
+    mockGenerateToken.mockReturnValue("jwt-token-456");
+
+    const result = await handler(createEvent("11222333000181"));
+    expect(result.isAuthorized).toBe(true);
+    expect(result.context?.jwt).toBe("jwt-token-456");
+    expect(result.context?.userId).toBe("uuid-456");
+    expect(result.context?.email).toBe("test.company@email.com");
   });
 });
