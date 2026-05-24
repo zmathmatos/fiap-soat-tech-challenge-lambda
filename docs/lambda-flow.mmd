@@ -1,0 +1,24 @@
+flowchart LR
+    Cliente -->|"Requisição com CPF\nHeader: x-document=CPF"| Gateway[Porta de entrada\nAPI Gateway HTTP v2]
+
+    Gateway -->|"Invocar authorizer\n(rota /customer/*)"| Auth[Função de Autenticação\nLambda Authorizer]
+
+    Auth -->|"Consulta usuário\npor CPF"| DB[(Banco de Dados\nRDS PostgreSQL)]
+    DB -->|"Dados do usuário"| Auth
+
+    Auth -->|"Autorizado: sim\n+ token JWT no contexto"| Gateway
+
+    Gateway -->|"HTTP_PROXY via VPC Link\n(token JWT encaminhado)"| NLB[Balanceador de Carga\nNLB no cluster EKS]
+    NLB -->|"Encaminha requisição"| Pods[Pods da Aplicação\nEKS Service]
+    Pods -->|"Resposta"| NLB
+    NLB -->|"Resposta"| Gateway
+    Gateway -->|"Resposta ao cliente"| Cliente
+
+    subgraph "VPC Privada (AWS)"
+        Auth
+        DB
+        NLB
+        Pods
+    end
+
+    note["Quando autenticado, o gateway encaminha a requisição com o token para a aplicação rodando no cluster Kubernetes."]
