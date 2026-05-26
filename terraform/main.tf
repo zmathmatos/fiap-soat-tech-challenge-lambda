@@ -144,7 +144,7 @@ resource "aws_apigatewayv2_integration" "backend_customer" {
   connection_id      = aws_apigatewayv2_vpc_link.backend.id
 
   request_parameters = {
-    "overwrite:header.authorization" = "$context.authorizer.jwt"
+    "overwrite:header.auth_token" = "$context.authorizer.jwt"
   }
 }
 
