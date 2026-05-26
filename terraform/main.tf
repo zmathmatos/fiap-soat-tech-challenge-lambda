@@ -95,6 +95,8 @@ resource "aws_apigatewayv2_stage" "default" {
   # `auto_deploy = true` means any route change is deployed automatically without a manual deploy step
   auto_deploy = true
 
+  # Throttling settings to prevent abuse. The rate limit set is 1 request per second with a burst limit of 1.
+  # This is very restrictive and is just for demonstration purposes.
   default_route_settings {
     throttling_rate_limit  = 1
     throttling_burst_limit = 1
