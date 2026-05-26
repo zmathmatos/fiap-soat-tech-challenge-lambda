@@ -95,6 +95,13 @@ resource "aws_apigatewayv2_stage" "default" {
   # `auto_deploy = true` means any route change is deployed automatically without a manual deploy step
   auto_deploy = true
 
+  # Throttling settings to prevent abuse. The rate limit set is 1 request per second with a burst limit of 1.
+  # This is very restrictive and is just for demonstration purposes.
+  default_route_settings {
+    throttling_rate_limit  = 1
+    throttling_burst_limit = 1
+  }
+
   tags = local.common_tags
 }
 
@@ -127,11 +134,25 @@ resource "aws_apigatewayv2_integration" "backend" {
   connection_id      = aws_apigatewayv2_vpc_link.backend.id
 }
 
+# Dedicated integration for customer routes that forwards the authorizer JWT as the Authorization header
+resource "aws_apigatewayv2_integration" "backend_customer" {
+  api_id             = aws_apigatewayv2_api.auth.id
+  integration_type   = "HTTP_PROXY"
+  integration_uri    = data.aws_lb_listener.backend.arn
+  integration_method = "ANY"
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.backend.id
+
+  request_parameters = {
+    "overwrite:header.auth_token" = "$context.authorizer.jwt"
+  }
+}
+
 # /customer/* routes are protected by the Lambda authorizer; traffic is forwarded to the EC2 backend
 resource "aws_apigatewayv2_route" "customer_routes" {
   api_id             = aws_apigatewayv2_api.auth.id
   route_key          = "ANY /customer/{proxy+}"
-  target             = "integrations/${aws_apigatewayv2_integration.backend.id}"
+  target             = "integrations/${aws_apigatewayv2_integration.backend_customer.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.lambda.id
   authorization_type = "CUSTOM"
 }

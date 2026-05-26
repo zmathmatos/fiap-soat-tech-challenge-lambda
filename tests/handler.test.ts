@@ -82,7 +82,7 @@ describe("Lambda Authorizer", () => {
 
     const result = await handler(createEvent("52998224725"));
     expect(result.isAuthorized).toBe(true);
-    expect(result.context?.jwt).toBe("jwt-token-123");
+    expect(result.context?.jwt).toBe("Bearer jwt-token-123");
     expect(result.context?.userId).toBe("uuid-123");
     expect(result.context?.email).toBe("test@test.com");
   });
@@ -99,7 +99,7 @@ describe("Lambda Authorizer", () => {
 
     const result = await handler(createEvent("11222333000181"));
     expect(result.isAuthorized).toBe(true);
-    expect(result.context?.jwt).toBe("jwt-token-456");
+    expect(result.context?.jwt).toBe("Bearer jwt-token-456");
     expect(result.context?.userId).toBe("uuid-456");
     expect(result.context?.email).toBe("test.company@email.com");
   });
