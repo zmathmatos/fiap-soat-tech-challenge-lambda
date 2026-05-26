@@ -50,7 +50,7 @@ docs/
 
 ## Dependências entre repos
 
-A ordem de criação é: **infra-k8s → infra-db → lambda**.
+A ordem de criação é: **infra_k8s -> infra_db ->  app -> lambda**.
 
 O Lambda lê remote state de ambos os repos anteriores:
 
@@ -59,7 +59,7 @@ O Lambda lê remote state de ambos os repos anteriores:
 | `infra-k8s` | `vpc_id`, `private_subnet_ids`, `eks_cluster_security_group_id` |
 | `infra-db` | `rds_address`, `rds_port`, `rds_database_name` |
 
-O backend EC2 é descoberto via data source `aws_instance` pela tag `Name=fiap-soat-dev-backend`.
+O backend EC2 é descoberto via `aws_lb_listener` pela porta `80`.
 
 ## Variáveis de ambiente (runtime Lambda)
 
@@ -106,7 +106,6 @@ cp .env.sample .env
 # editar .env com credenciais locais (ex: PostgreSQL via docker-compose)
 npm install
 npm test
-npm run build
 npm run package   # gera dist/lambda.zip
 ```
 
@@ -139,7 +138,7 @@ Disparado em push para `main` ou manualmente via `workflow_dispatch`. Sequência
 
 ### Pré-requisitos
 
-- Node.js 18+, npm
+- Node.js 22+, npm
 - Terraform >= 1.0
 - AWS CLI configurado com credenciais válidas
 - Bucket S3 de state pré-existente (criar com `aws s3 mb s3://<BUCKET_NAME> --region us-east-1`)
@@ -148,15 +147,15 @@ Disparado em push para `main` ou manualmente via `workflow_dispatch`. Sequência
 ### Passos
 
 ```bash
-npm run build && npm run package   # gera dist/lambda.zip
+npm run package   # gera dist/lambda.zip
 
 cd terraform
 
 export TF_STATE_BUCKET=<BUCKET_NAME>
 
-terraform init
+terraform init -backend-config="bucket=$TF_STATE_BUCKET"
 
-terraform apply -var-file=terraform.tfvars
+terraform apply
 ```
 
 > O arquivo `terraform.tfvars` deve conter `lambda_role_arn`, `db_user`, `db_password`, `jwt_secret`, `jwt_expires_in`. Nunca commitar esse arquivo com credenciais reais.
@@ -178,7 +177,7 @@ aws logs tail /aws/lambda/fiap-soat-dev-auth --follow --region us-east-1
 
 ## Como destruir
 
-A ordem correta de destruição é: **app → lambda → infra-db → infra-k8s**.
+A ordem correta de destruição é: **lambda -> app -> infra_db -> infra_k8s**.
 
 ```bash
 cd terraform
