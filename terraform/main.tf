@@ -127,11 +127,25 @@ resource "aws_apigatewayv2_integration" "backend" {
   connection_id      = aws_apigatewayv2_vpc_link.backend.id
 }
 
+# Dedicated integration for customer routes that forwards the authorizer JWT as the Authorization header
+resource "aws_apigatewayv2_integration" "backend_customer" {
+  api_id             = aws_apigatewayv2_api.auth.id
+  integration_type   = "HTTP_PROXY"
+  integration_uri    = data.aws_lb_listener.backend.arn
+  integration_method = "ANY"
+  connection_type    = "VPC_LINK"
+  connection_id      = aws_apigatewayv2_vpc_link.backend.id
+
+  request_parameters = {
+    "overwrite:header.authorization" = "$context.authorizer.jwt"
+  }
+}
+
 # /customer/* routes are protected by the Lambda authorizer; traffic is forwarded to the EC2 backend
 resource "aws_apigatewayv2_route" "customer_routes" {
   api_id             = aws_apigatewayv2_api.auth.id
   route_key          = "ANY /customer/{proxy+}"
-  target             = "integrations/${aws_apigatewayv2_integration.backend.id}"
+  target             = "integrations/${aws_apigatewayv2_integration.backend_customer.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.lambda.id
   authorization_type = "CUSTOM"
 }

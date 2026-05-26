@@ -34,7 +34,7 @@ export const handler = async (
     return {
       isAuthorized: true,
       context: {
-        jwt: token,
+        jwt: `Bearer ${token}`,
         userId: user.id,
         email: user.email,
         role: user.role,
